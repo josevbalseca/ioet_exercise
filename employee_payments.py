@@ -8,7 +8,7 @@ from util.calculate_payment import CalculatePayment
 
 
 def get_argument_parser() -> ArgumentParser:
-    """ Params definition """
+    """Params definition"""
     parser = ArgumentParser()
 
     parser.add_argument(
@@ -19,34 +19,34 @@ def get_argument_parser() -> ArgumentParser:
 
 
 def get_amount_to_pay_by_employee(input_file_name: str) -> Dict:
-    """ Get the salary by employee for each line in the file """
+    """Get the salary by employee for each line in the file"""
     amount_to_pay_by_employee: Dict = {}
-    try:
-        with open(input_file_name, "r") as reader:
+    # try:
+    with open(input_file_name, "r") as reader:
 
-            # Read each line and process it to avoid use a lot of resources
-            for idx, line in enumerate(reader, start=1):
-                # Calculate the amount_to_pay for each employee
-                # according to the hours worked
-                calculate_payment = CalculatePayment(line=line, idx=idx)
-                employee, amount_to_pay = calculate_payment.get_employee_payment()
-                if employee:
-                    amount_to_pay_by_employee[employee] = amount_to_pay
-    except IOError:
+        # Read each line and process it to avoid use a lot of resources
+        for idx, line in enumerate(reader, start=1):
+            # Calculate the amount_to_pay for each employee
+            # according to the hours worked
+            calculate_payment = CalculatePayment(line=line, idx=idx)
+            employee, amount_to_pay = calculate_payment.get_employee_payment()
+            if employee:
+                amount_to_pay_by_employee[employee] = amount_to_pay
+    """except IOError:
         logging.error("there is an error to read input file, check name and path")
     except Exception:
-        logging.error("there is an error while processing employee hours worked file")
+        logging.error("there is an error while processing employee hours worked file")"""
 
     return amount_to_pay_by_employee
 
 
 def main(args=None):
-    """ Process input file to obtain the amount to pay by employee"""
+    """Process input file to obtain the amount to pay by employee"""
     parser = get_argument_parser()
     args = parser.parse_args()
 
     if args.input_file_name:
-        """ Execute the processing when input file is given """
+        """Execute the processing when input file is given"""
         # Calculate the amount_to_pay for each employee
         # according to the hours worked
         amount_to_pay_by_employee = get_amount_to_pay_by_employee(

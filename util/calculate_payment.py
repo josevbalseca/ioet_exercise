@@ -1,7 +1,10 @@
 import logging
 import re
+import itertools
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+from collections import defaultdict
+
 
 EQUAL = "="
 ZERO = 0.00
@@ -9,7 +12,7 @@ IS_WORKED_HOUR_PAIR = re.compile(
     "(MO|TU|WE|TH|FR|SA|SU)([01]?[0-9]|2[0-3]):[0-5][0-9]-([01]?[0-9]|2[0-3]):[0-5][0-9]"
 )
 
-PAYMENT_TABLE = {
+PAYMENT_TABLE: Dict[int, Any] = {
     1: {
         "hour_pairs": [0, 9.00],
         "payment_by_days": [["MO", "TU", "WE", "TH", "FR"], ["SA", "SU"]],
@@ -29,7 +32,7 @@ PAYMENT_TABLE = {
 
 
 class CalculatePayment:
-    """ Class used to calculate the employee payment """
+    """Class used to calculate the employee payment"""
 
     employee_name: Optional[str] = ""
 
@@ -38,7 +41,7 @@ class CalculatePayment:
         self.idx = idx
 
     def get_employee_name(self) -> Optional[str]:
-        """ Get the employee name, the string before equal if exists """
+        """Get the employee name, the string before equal if exists"""
         equal_found = self.line.count(EQUAL)
 
         if equal_found != 1:
@@ -47,7 +50,7 @@ class CalculatePayment:
         return self.line[: self.line.find(EQUAL)]
 
     def get_hours_worked(self) -> Optional[List[str]]:
-        """ Get the hours worked, the string after equal if exists """
+        """Get the hours worked, the string after equal if exists"""
         equal_found = self.line.count(EQUAL)
 
         if equal_found != 1:
@@ -83,12 +86,9 @@ class CalculatePayment:
         Get the daily hour pairs, in one day is possible to
         have one or more pairs
         """
-        daily_hour_pairs_worked: Dict[str, List[List[float]]] = {}
+        daily_hour_pairs_worked = defaultdict(list)
         for hour_worked in hours_worked:
             day = hour_worked[0:2]
-            if day not in daily_hour_pairs_worked:
-                daily_hour_pairs_worked[day] = []
-
             start_hour = self.convert_hour_to_float(hour_worked[2:7])
             end_hour = self.convert_hour_to_float(hour_worked[8:])
 
@@ -113,15 +113,11 @@ class CalculatePayment:
         hours worked in this day
         """
         for day, hour_pairs in daily_hour_pairs_worked.items():
-            overlap = False
-            for idx1 in range(len(hour_pairs) - 1):
-                start_hour1 = hour_pairs[idx1][0]
-                end_hour1 = hour_pairs[idx1][1]
-                for idx2 in range(idx1 + 1, len(hour_pairs)):
-                    start_hour2 = hour_pairs[idx2][0]
-                    end_hour2 = hour_pairs[idx2][1]
-                    if end_hour1 >= start_hour2 and end_hour2 >= start_hour1:
-                        overlap = True
+            hour_pairs_sorted = sorted(hour_pairs, key=lambda x: x[0])
+            overlap = any(
+                hour_pairs_sorted[idx + 1][0] < hour_pairs_sorted[idx][1]
+                for idx in range(len(hour_pairs_sorted) - 1)
+            )
             if overlap:
                 logging.error(
                     f"there are overlapped hours in day {day} for employee {self.employee_name} line {self.idx}"
@@ -139,33 +135,31 @@ class CalculatePayment:
         an employee worked between two or more ranges
         """
         value_to_paid = ZERO
-        for day, hour_pairs in daily_hours_pairs_worked.items():
-            for hour_pair in hour_pairs:
-                start_hour1 = hour_pair[0]
-                end_hour1 = hour_pair[1]
-                if start_hour1 != end_hour1:
-                    for idx1 in PAYMENT_TABLE:
-                        hour_pairs_in_table = PAYMENT_TABLE[idx1]["hour_pairs"]
-                        start_hour2 = hour_pairs_in_table[0]
-                        end_hour2 = hour_pairs_in_table[1]
-                        if end_hour1 >= start_hour2 and end_hour2 >= start_hour1:
-                            start_hour = ZERO
-                            end_hour = ZERO
-                            start_hour = max(start_hour1, start_hour2)
-                            end_hour = min(end_hour1, end_hour2)
-                            total_hours = end_hour - start_hour
 
-                            hour_value = ZERO
-                            days: List[List[str]]
-                            for idx2, days in enumerate(
-                                PAYMENT_TABLE[idx1]["payment_by_days"], start=0
-                            ):
-                                if day in days:
-                                    hour_value = PAYMENT_TABLE[idx1]["hour_value"][idx2]
-                                    break
-                            value_to_paid += total_hours * hour_value
+        for (day, hour_pairs), idx1 in itertools.product(
+            daily_hours_pairs_worked.items(), PAYMENT_TABLE
+        ):
+            start_hour2, end_hour2 = PAYMENT_TABLE[idx1]["hour_pairs"]
+            for start_hour1, end_hour1 in hour_pairs:
+                if end_hour1 >= start_hour2 and end_hour2 >= start_hour1:
+                    total_hours = min(end_hour1, end_hour2) - max(
+                        start_hour1, start_hour2
+                    )
+
+                    value_to_paid += total_hours * self.get_hour_value_day(
+                        day=day, idx=idx1
+                    )
 
         return value_to_paid
+
+    def get_hour_value_day(self, day: str, idx: int) -> float:
+        """get hour value for a specfic day in a schedule"""
+        hour_value = ZERO
+        for idx2, days in enumerate(PAYMENT_TABLE[idx]["payment_by_days"]):
+            if day in days:
+                hour_value = PAYMENT_TABLE[idx]["hour_value"][idx2]
+                break
+        return hour_value
 
     def get_employee_payment(self) -> Tuple[Optional[str], Optional[float]]:
         """
